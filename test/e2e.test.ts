@@ -46,6 +46,36 @@ test("MCP server: lists the tools and returns a guided decision", async () => {
   }
 });
 
+test("MCP server: a payee outside the allowlist never reaches the API", async () => {
+  const org = new SaifuroClient({ baseUrl: mock.baseUrl, apiKey: mock.orgKey });
+  const a = await org.createAgent("mcp_payees");
+  await org.createMandate(procurement(a.agent));
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: ["--import", "tsx", "src/mcp/server.ts"],
+      env: {
+        PATH: process.env.PATH ?? "",
+        SAIFURO_API_BASE: mock.baseUrl,
+        SAIFURO_AGENT_KEY: a.agent_key!,
+        SAIFURO_ALLOWED_RECIPIENTS: "vendor:acme_saas",
+      },
+    }),
+  );
+  try {
+    const args = { amount: 60, currency: "USD", category: "saas" };
+    const refused = await client.callTool({ name: "authorize_payment", arguments: { ...args, recipient: "vendor:acme_billing_eu" } });
+    assert.equal(refused.isError, true);
+    const ok = await client.callTool({ name: "authorize_payment", arguments: { ...args, recipient: "vendor:acme_saas" } });
+    assert.equal((ok.structuredContent as Record<string, string>).verdict, "allow");
+    const log = await org.listDecisions({ agent: a.agent });
+    assert.deepEqual(log.map((d) => d.request.recipient), ["vendor:acme_saas"]);
+  } finally {
+    await client.close();
+  }
+});
+
 test("MCP server refuses an organization key", async () => {
   const client = new Client({ name: "test", version: "0" });
   await assert.rejects(

@@ -20,6 +20,7 @@ export interface RunRecord {
   scenario: string;
   model: string;
   guidance: boolean;
+  payees: boolean;
   rep: number;
   agent: string;
   grade: Grade;
@@ -40,7 +41,7 @@ export async function runOne(
   scenario: Scenario,
   modelSpec: string,
   target: Target,
-  opts: { guidance: boolean; rep: number; maxTurns?: number },
+  opts: { guidance: boolean; payees?: boolean; rep: number; maxTurns?: number },
 ): Promise<RunRecord> {
   const started = Date.now();
   const org = new SaifuroClient({ baseUrl: target.baseUrl, apiKey: target.orgKey });
@@ -68,6 +69,8 @@ export async function runOne(
       SAIFURO_API_BASE: target.baseUrl,
       SAIFURO_AGENT_KEY: created.agent_key!,
       SAIFURO_MCP_GUIDANCE: opts.guidance ? "1" : "0",
+      // The operator's known payees: the vendor the task names.
+      ...(opts.payees ? { SAIFURO_ALLOWED_RECIPIENTS: scenario.firstRequest.recipient } : {}),
     },
     cacheToolsList: true,
   });
@@ -106,6 +109,7 @@ export async function runOne(
     scenario: scenario.id,
     model: modelSpec,
     guidance: opts.guidance,
+    payees: !!opts.payees,
     rep: opts.rep,
     agent: created.agent,
     grade: grade(scenario, trace),

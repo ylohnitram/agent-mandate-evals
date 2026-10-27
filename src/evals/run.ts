@@ -13,6 +13,7 @@ const { values } = parseArgs({
     reps: { type: "string", default: "1" },
     target: { type: "string", default: "mock" },
     guidance: { type: "string", default: "on" }, // on | off | both
+    payees: { type: "string", default: "off" }, // MCP payee allowlist: on | off | both
     "max-tokens": { type: "string", default: "300000" },
     "max-turns": { type: "string", default: "10" },
     out: { type: "string", default: "results" },
@@ -23,7 +24,11 @@ const models = values.models!.split(",").map((s) => s.trim()).filter(Boolean);
 const scenarios = values.scenarios
   ? SCENARIOS.filter((s) => values.scenarios!.split(",").includes(s.id))
   : SCENARIOS;
-const guidances = values.guidance === "both" ? [true, false] : [values.guidance !== "off"];
+const flag = (v: string | undefined, dflt: boolean) => (v === "both" ? [true, false] : [v === undefined ? dflt : v === "on"]);
+const variants = flag(values.guidance, true).flatMap((guidance) =>
+  flag(values.payees, false).map((payees) => ({ guidance, payees })),
+);
+const varies = { guidance: values.guidance === "both", payees: values.payees === "both" };
 const reps = Number(values.reps);
 const maxTokens = Number(values["max-tokens"]);
 
@@ -46,19 +51,19 @@ if (values.target === "sandbox") {
 const records: RunRecord[] = [];
 let spent = 0;
 outer: for (const model of models) {
-  for (const guidance of guidances) {
+  for (const v of variants) {
     for (const s of scenarios) {
       for (let rep = 1; rep <= reps; rep++) {
         if (spent >= maxTokens) {
           console.error(`token budget ${maxTokens} reached, stopping`);
           break outer;
         }
-        const r = await runOne(s, model, target, { guidance, rep, maxTurns: Number(values["max-turns"]) });
+        const r = await runOne(s, model, target, { ...v, rep, maxTurns: Number(values["max-turns"]) });
         spent += r.tokens.input + r.tokens.output;
         records.push(r);
         const failed = r.grade.checks.filter((c) => !c.ok).map((c) => `${c.name}${c.detail ? `: ${c.detail}` : ""}`);
         console.log(
-          `${r.grade.pass ? "PASS" : "FAIL"}  ${model}  guidance=${guidance ? "on" : "off"}  ${s.id}#${rep}` +
+          `${r.grade.pass ? "PASS" : "FAIL"}  ${model}  guidance=${v.guidance ? "on" : "off"} payees=${v.payees ? "on" : "off"}  ${s.id}#${rep}` +
             `  ${r.tokens.input + r.tokens.output} tok${failed.length ? `\n      ${failed.join("\n      ")}` : ""}`,
         );
       }
@@ -76,8 +81,14 @@ console.log(`\n${md}\nsaved ${values.out}/${stamp}.{json,md}`);
 process.exitCode = 0;
 
 function summary(rs: RunRecord[], targetName: string): string {
-  const cols = [...new Set(rs.map((r) => `${r.model}${guidances.length > 1 ? ` (guidance ${r.guidance ? "on" : "off"})` : ""}`))];
-  const key = (r: RunRecord) => `${r.model}${guidances.length > 1 ? ` (guidance ${r.guidance ? "on" : "off"})` : ""}`;
+  const key = (r: RunRecord) => {
+    const tags = [
+      ...(varies.guidance ? [`guidance ${r.guidance ? "on" : "off"}`] : []),
+      ...(varies.payees ? [`payees ${r.payees ? "on" : "off"}`] : []),
+    ];
+    return `${r.model}${tags.length ? ` (${tags.join(", ")})` : ""}`;
+  };
+  const cols = [...new Set(rs.map(key))];
   const lines = [
     `Target: ${targetName}. Cell = passed runs / runs.`,
     "",
