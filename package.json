@@ -1,0 +1,32 @@
+{
+  "name": "agent-mandate-evals",
+  "version": "0.1.0",
+  "description": "MCP payment check and behavioural evals for agents spending under Saifuro mandates",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --import tsx --test test/*.test.ts",
+    "mock": "tsx src/mock/main.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "eval": "tsx src/evals/run.ts"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.90",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@openai/agents": "^0.21.0",
+    "@openai/agents-extensions": "^0.21.0",
+    "ai": "^7.0.155",
+    "jose": "^6.2.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  }
+}
